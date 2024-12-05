@@ -6,12 +6,12 @@ import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs
 export default function Home() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [couponCode, setCouponCode] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [isLogin, setIsLogin] = useState(true)
+  const [claimedCoupon, setClaimedCoupon] = useState<{code: string, id: string} | null>(null)
 
   const supabase = createClientComponentClient()
 
@@ -92,6 +92,9 @@ export default function Home() {
     try {
       const response = await fetch('/api/coupons/claim', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       })
 
       const data = await response.json()
@@ -100,7 +103,8 @@ export default function Home() {
         throw new Error(data.error || 'Failed to claim coupon')
       }
 
-      setCouponCode(data.code)
+      setClaimedCoupon(data.coupon)
+      setMessage('Coupon claimed successfully!')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -110,7 +114,7 @@ export default function Home() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
-    setCouponCode(null)
+    setClaimedCoupon(null)
     setUser(null)
   }
 
@@ -169,23 +173,23 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Coupon Section */}
+            {/* Updated Coupon Section */}
             <div className="flex flex-col items-center gap-4">
-              <button
-                onClick={handleClaimCoupon}
-                disabled={loading}
-                className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50 w-full"
-              >
-                {loading ? 'Claiming...' : 'Claim Coupon'}
-              </button>
-
-              {couponCode && (
+              {!claimedCoupon ? (
+                <button
+                  onClick={handleClaimCoupon}
+                  disabled={loading}
+                  className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50 w-full"
+                >
+                  {loading ? 'Claiming...' : 'Claim Random Coupon'}
+                </button>
+              ) : (
                 <div className="text-center w-full">
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                    Your coupon code:
+                    Your claimed coupon code:
                   </p>
                   <code className="block w-full bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded-lg font-mono text-lg">
-                    {couponCode}
+                    {claimedCoupon.code}
                   </code>
                 </div>
               )}

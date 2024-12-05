@@ -2,40 +2,38 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  "https://mowgzyrspfshtgzbhshx.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vd2d6eXJzcGZzaHRnemJoc2h4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM0MDYyMzQsImV4cCI6MjA0ODk4MjIzNH0.BY5008h0OU-TqLB_q3ndhnAQjegap4dsHTWbeVAg8Yw"
 )
 
 export async function POST(request: Request) {
   try {
-    const { code } = await request.json()
-
-    // First, check if the coupon exists and is not claimed
-    const { data: existingCoupon, error: fetchError } = await supabase
+    // Get a random unclaimed coupon
+    const { data: availableCoupon, error: fetchError } = await supabase
       .from('coupons')
       .select('*')
-      .eq('code', code)
+      .eq('claimed', false)
+      .limit(1)
       .single()
 
-    if (fetchError || !existingCoupon) {
+    if (fetchError || !availableCoupon) {
       return NextResponse.json(
-        { error: 'Invalid coupon code' },
-        { status: 400 }
+        { error: 'No available coupons found' },
+        { status: 404 }
       )
     }
 
-    if (existingCoupon.claimed) {
-      return NextResponse.json(
-        { error: 'Coupon has already been claimed' },
-        { status: 400 }
-      )
-    }
-
-    // Use update instead of insert to modify the existing coupon
+    // Update the coupon as claimed with timestamp and user info
     const { error: updateError } = await supabase
       .from('coupons')
-      .update({ claimed: true })
-      .eq('code', code)
+      .update({ 
+        claimed: true,
+        claimed_at: new Date().toISOString(),
+        // Note: You'll need to get the user ID from the session/auth
+        // claimed_by: userId 
+      })
+      .eq('id', availableCoupon.id)
+      .eq('claimed', false) // Extra check to prevent race conditions
 
     if (updateError) {
       return NextResponse.json(
@@ -44,7 +42,13 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ 
+      success: true, 
+      coupon: {
+        code: availableCoupon.code,
+        id: availableCoupon.id
+      }
+    })
   } catch (error) {
     console.error('Error claiming coupon:', error)
     return NextResponse.json(
