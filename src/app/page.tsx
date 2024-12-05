@@ -2,16 +2,19 @@
 
 import { useState, useEffect } from 'react'
 import { createClientComponentClient, User } from '@supabase/auth-helpers-nextjs'
+import AuthForm from '@/components/auth-form'
+import { CouponCard } from '@/components/coupon-card'
 
 export default function Home() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [user, setUser] = useState<User | null>(null)
-  const [isLogin, setIsLogin] = useState(true)
-  const [claimedCoupon, setClaimedCoupon] = useState<{code: string, id: string} | null>(null)
+  const [claimedCoupon, setClaimedCoupon] = useState<{
+    code: string
+    discount: string
+    expiresAt: string
+  } | null>(null)
 
   const supabase = createClientComponentClient()
 
@@ -32,62 +35,10 @@ export default function Home() {
     }
   }, [supabase.auth])
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Something went wrong')
-      }
-
-      setMessage(data.message)
-      setEmail('')
-      setPassword('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) throw error
-
-      setMessage('Logged in successfully!')
-      setEmail('')
-      setPassword('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to login')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleClaimCoupon = async () => {
     setLoading(true)
     setError(null)
+    setMessage(null)
     
     try {
       const response = await fetch('/api/coupons/claim', {
@@ -103,10 +54,15 @@ export default function Home() {
         throw new Error(data.error || 'Failed to claim coupon')
       }
 
-      setClaimedCoupon(data.coupon)
+      setClaimedCoupon({
+        code: data.coupon.code,
+        discount: data.coupon.discount,
+        expiresAt: new Date(data.coupon.expires_at).toLocaleDateString()
+      })
       setMessage('Coupon claimed successfully!')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
+      console.error('Claim error:', err)
     } finally {
       setLoading(false)
     }
@@ -118,154 +74,47 @@ export default function Home() {
     setUser(null)
   }
 
-  const toggleAuthMode = () => {
-    setIsLogin(!isLogin)
-    setError(null)
-    setMessage(null)
+  if (!user) {
+    return <AuthForm />
   }
 
   return (
-    <div className="min-h-screen bg-background p-8">
-      <div className="max-w-md mx-auto space-y-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">Coupon Claiming App</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            {user ? 'Claim your exclusive coupon' : `${isLogin ? 'Login' : 'Sign up'} to claim your exclusive coupon`}
-          </p>
-        </div>
-
+    <div className="container flex min-h-screen w-screen flex-col items-center justify-center">
+      <div className="mx-auto flex w-full flex-col items-center justify-center space-y-6 sm:w-[350px]">
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-4 rounded-lg text-sm">
+          <div className="w-full rounded-lg bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/30 dark:text-red-400">
             {error}
           </div>
         )}
 
         {message && (
-          <div className="bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 p-4 rounded-lg text-sm">
+          <div className="w-full rounded-lg bg-green-50 p-4 text-sm text-green-600 dark:bg-green-900/30 dark:text-green-400">
             {message}
           </div>
         )}
 
-        {user ? (
-          <div className="space-y-8">
-            {/* Profile Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Profile</h2>
-                  <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs rounded-full">
-                    Logged In
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Email: <span className="text-foreground">{user.email}</span>
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    ID: <span className="font-mono text-xs text-foreground">{user.id}</span>
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Last Sign In: <span className="text-foreground">
-                      {new Date(user.last_sign_in_at || '').toLocaleString()}
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Updated Coupon Section */}
-            <div className="flex flex-col items-center gap-4">
-              {!claimedCoupon ? (
-                <button
-                  onClick={handleClaimCoupon}
-                  disabled={loading}
-                  className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50 w-full"
-                >
-                  {loading ? 'Claiming...' : 'Claim Random Coupon'}
-                </button>
-              ) : (
-                <div className="text-center w-full">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                    Your claimed coupon code:
-                  </p>
-                  <code className="block w-full bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded-lg font-mono text-lg">
-                    {claimedCoupon.code}
-                  </code>
-                </div>
-              )}
-
-              <button
-                onClick={handleSignOut}
-                className="text-sm text-gray-600 dark:text-gray-400 hover:underline mt-4"
-              >
-                Sign Out
-              </button>
-            </div>
-          </div>
+        {claimedCoupon ? (
+          <CouponCard
+            code={claimedCoupon.code}
+            discount={claimedCoupon.discount}
+            expiresAt={claimedCoupon.expiresAt}
+          />
         ) : (
-          <div className="space-y-6">
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={() => setIsLogin(true)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  isLogin 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                Login
-              </button>
-              <button
-                onClick={() => setIsLogin(false)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  !isLogin 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                Sign Up
-              </button>
-            </div>
-
-            <form onSubmit={isLogin ? handleLogin : handleSignUp} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium mb-2">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium mb-2">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {loading ? 'Loading...' : (isLogin ? 'Login' : 'Sign Up')}
-              </button>
-            </form>
-          </div>
+          <button
+            onClick={handleClaimCoupon}
+            disabled={loading}
+            className="w-full rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            {loading ? 'Claiming...' : 'Claim Random Coupon'}
+          </button>
         )}
+
+        <button
+          onClick={handleSignOut}
+          className="text-sm text-muted-foreground hover:underline"
+        >
+          Sign Out
+        </button>
       </div>
     </div>
   )

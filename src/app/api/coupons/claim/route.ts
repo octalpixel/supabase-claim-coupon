@@ -1,39 +1,43 @@
-import { createClient } from '@supabase/supabase-js'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
-const supabase = createClient(
-  "https://mowgzyrspfshtgzbhshx.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vd2d6eXJzcGZzaHRnemJoc2h4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM0MDYyMzQsImV4cCI6MjA0ODk4MjIzNH0.BY5008h0OU-TqLB_q3ndhnAQjegap4dsHTWbeVAg8Yw"
-)
-
-export async function POST(request: Request) {
+export async function POST() {
   try {
+    const supabase = createRouteHandlerClient({ cookies })
+
+    // Verify authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
     // Get a random unclaimed coupon
-    const { data: availableCoupon, error: fetchError } = await supabase
+    const { data: coupon, error: couponError } = await supabase
       .from('coupons')
       .select('*')
-      .eq('claimed', false)
+      .is('claimed_by', null)
       .limit(1)
       .single()
 
-    if (fetchError || !availableCoupon) {
+    if (couponError || !coupon) {
       return NextResponse.json(
-        { error: 'No available coupons found' },
+        { error: 'No coupons available' },
         { status: 404 }
       )
     }
 
-    // Update the coupon as claimed with timestamp and user info
+    // Update the coupon to mark it as claimed
     const { error: updateError } = await supabase
       .from('coupons')
       .update({ 
-        claimed: true,
-        claimed_at: new Date().toISOString(),
-        // Note: You'll need to get the user ID from the session/auth
-        // claimed_by: userId 
+        claimed_by: user.id,
+        claimed_at: new Date().toISOString()
       })
-      .eq('id', availableCoupon.id)
-      .eq('claimed', false) // Extra check to prevent race conditions
+      .eq('id', coupon.id)
 
     if (updateError) {
       return NextResponse.json(
@@ -42,15 +46,16 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
       coupon: {
-        code: availableCoupon.code,
-        id: availableCoupon.id
+        code: coupon.code,
+        discount: coupon.discount || '20% OFF',
+        expires_at: coupon.expires_at || new Date(Date.now() + 7*24*60*60*1000).toISOString()
       }
     })
+
   } catch (error) {
-    console.error('Error claiming coupon:', error)
+    console.error('Coupon claim error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
